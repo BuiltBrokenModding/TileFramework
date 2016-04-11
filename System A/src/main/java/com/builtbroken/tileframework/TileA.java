@@ -10,18 +10,14 @@ import com.builtbroken.mc.core.network.packet.AbstractPacket;
 import com.builtbroken.mc.core.registry.implement.IRegistryInit;
 import com.builtbroken.mc.lib.helper.MathUtility;
 import com.builtbroken.mc.lib.helper.WrenchUtility;
-import com.builtbroken.mc.lib.render.block.BlockRenderHandler;
 import com.builtbroken.mc.lib.render.block.RenderTileDummy;
 import com.builtbroken.mc.lib.transform.region.Cube;
 import com.builtbroken.mc.lib.transform.vector.Location;
 import com.builtbroken.mc.lib.transform.vector.Pos;
 import com.builtbroken.mc.prefab.tile.entity.TileEntityBase;
-import com.mojang.authlib.GameProfile;
-import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 import net.minecraft.block.Block;
-import net.minecraft.block.material.Material;
 import net.minecraft.client.renderer.RenderBlocks;
 import net.minecraft.client.renderer.texture.IIconRegister;
 import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
@@ -32,11 +28,9 @@ import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.Item;
-import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.network.Packet;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.IIcon;
 import net.minecraft.util.MathHelper;
@@ -49,7 +43,8 @@ import net.minecraftforge.common.util.ForgeDirection;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Base class for VE's tile system that combines the Block and Tile class to make implementing
@@ -71,79 +66,58 @@ import java.util.*;
  */
 public abstract class TileA extends TileEntityBase implements IWorldPosition, IPlayerUsing, IRegistryInit
 {
-    //Static block vars, never use in your tile
-    /** STATIC BLOCK, block for this tile. Will not be initialized in each tile */
-    private BlockTileA block = null;
+    //============= External data points =======
+    //Do not change, or modifies this data inside a tile
     /** STATIC BLOCK, injected by the BlockTile for methods calls */
     private IBlockAccess access = null;
-    /** STATIC BLOCK, Mod domain, injected when the tile is built */
-    public String domain;
 
-    //Block vars
-    /** BLOCK, name of the block for this tile */
-    public String name;
-    /** BLOCK, creative tab to use for listing this tile */
-    public CreativeTabs creativeTab;
-    /** BLOCK, material type for the block to use for varies checks */
-    public Material material = Material.clay;
-    /** BLOCK, hardness value for mining speed */
-    public float hardness = 1;
-    /** BLOCK, resistance value for explosions */
-    public float resistance = 1;
-    /** BLOCK, can this tile emmit redstone */
-    public boolean canEmmitRedstone = false;
-    /** BLOCK, is the block solid (true) or can it be seen threw (false) */
-    public boolean isOpaque = false;
-    /** BLOCK, sound this tile makes when entities step on it */
-    public Block.SoundType stepSound = Block.soundTypeStone;
-    /** BLOCK, ItemBlock class to register with this tile */
-    public Class<? extends ItemBlock> itemBlock = ItemBlock.class;
+    /** Tile Data used to describe how the block functions that wrappers the tile. */
+    protected final TileData tileData;
 
-    /** Collision box for this tile, also used for selection and any other size value for the block */
-    protected Cube bounds = new Cube(0, 0, 0, 1, 1, 1);
+    /**
+     * IF true this is a block wrapper, and not a tile. Make sure to check this
+     * before doing tile only, or block only tasks.
+     */
+    protected final boolean isBlock;
 
-    //Icon vars
-    /** Map of icons by name */
-    @SideOnly(Side.CLIENT)
-    protected HashMap<String, IIcon> icons;
-    /** Should the tile use the helper functionality for registering and getting textures by sides */
-    protected boolean useSidedTextures = false;
-    /** Name of the main texture for the block */
-    protected String textureName;
 
-    //Renderer vars
+    //============= Internal Data ==========
+    //Only use inside of a tile object
+
     /** TILE, Triggered when dynamic renderer crashes to prevent more errors from spamming chat */
     public boolean dynamicRendererCrashed = false;
-    /** BLOCK, Should we render a normal block */
-    public boolean renderNormalBlock = true;
-    /** BLOCK, Should we render a TileEntitySpecialRenderer */
-    public boolean renderTileEntity = true;
-    /** BLOCK, Render Type used by the block for checking how to render */
-    public int renderType = BlockRenderHandler.ID; //renderNormalBlock will force this to zero
 
     //Tile Vars
     /** TILE, Current tick count, starts when the tile is placed */
     public long ticks = 0L;
     /** TILE, Next tick when cleanup code will be called to check the sanity of the tile */
     protected int nextCleanupTick = 200;
-    /** TILE, Set of player's with this tile's interface open, mainly used for GUI packet updates */
-    protected final Set<EntityPlayer> playersUsing = new HashSet();
-    /** TILE, Owner of the tile as a UUID, primary method for getting the player who owns this tile */
-    protected UUID owner;
-    /** TILE, Owner of the tile as a String, mainly used for display or quick checks */
-    protected String username;
 
-    /** STATIC BLOCK, main method for creating a new Static Tile */
-    public TileA(String name, Material material)
+
+    /**
+     * Used to create a static version of the tile for
+     * wrapping block calls to this class file. However,
+     * this can be used to create new Tile objects
+     * if a Reference to {@link TileData} is accessible
+     * directly.
+     *
+     * @param data
+     */
+    public TileA(TileData data)
     {
-        this.name = name;
-        this.material = material;
+        this.tileData = data;
+        this.isBlock = true;
     }
 
-    /** TILE, use this to initialize a tile without setting block data */
+    /**
+     * TILE, use this to initialize a tile without setting block data.
+     * This constructor is required in order for {@link net.minecraft.tileentity.TileEntity#createAndLoadEntity(NBTTagCompound)}
+     * to function correctly. Without it forge will crash when loading your tile from memory or disk.
+     */
     public TileA()
     {
-
+        this.tileData = TileData.getDataFor(getClass());
+        this.isBlock = false;
     }
 
     /**
@@ -220,34 +194,6 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
         return 100 + (int) (world().rand.nextFloat() * 2000);
     }
 
-    @Override
-    public void readFromNBT(NBTTagCompound nbt)
-    {
-        super.readFromNBT(nbt);
-        if (nbt.hasKey("tileOwnerMostSigBit") && nbt.hasKey("tileOwnerLeastSigBit"))
-        {
-            this.owner = new UUID(nbt.getLong("tileOwnerMostSigBit"), nbt.getLong("tileOwnerLeastSigBit"));
-        }
-        if (nbt.hasKey("tileOwnerUsername"))
-        {
-            this.username = nbt.getString("tileOwnerUsername");
-        }
-    }
-
-    @Override
-    public void writeToNBT(NBTTagCompound nbt)
-    {
-        super.writeToNBT(nbt);
-        if (owner != null)
-        {
-            nbt.setLong("tileOwnerMostSigBit", this.owner.getMostSignificantBits());
-            nbt.setLong("tileOwnerLeastSigBit", this.owner.getLeastSignificantBits());
-        }
-        if (username != null && !username.isEmpty())
-        {
-            nbt.setString("tileOwnerUsername", this.username);
-        }
-    }
 
     /** BLOCK, called from the world when the block is updated */
     public void blockUpdate()
@@ -397,22 +343,7 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
     @Override
     public Block getBlockType()
     {
-        if (getAccess() != null && block == null)
-        {
-            Block b = getAccess().getBlock(xi(), yi(), zi());
-            if (b instanceof BlockTileA)
-            {
-                block = (BlockTileA) b;
-            }
-            else
-            {
-                //This should never happen but just in case... it is handled to prevent world crashes
-                Engine.error("Block at tile location " + toLocation() + " is not an instance of BlockTile. Destroying block " + b + " to prevent errors.");
-                invalidate();
-                world().setBlockToAir(xi(), yi(), zi());
-            }
-        }
-        return block;
+        return getTileData().block;
     }
 
     public BlockTileA getTileBlock()
@@ -508,12 +439,6 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
         return getWorldObj();
     }
 
-    /** BLOCK, is only called for the static tile */
-    public void setBlock(BlockTileA block)
-    {
-        this.block = block;
-    }
-
     /** STATIC BLOCk, is only called by BlockTile for the static version of this tile */
     public void setAccess(IBlockAccess access)
     {
@@ -595,10 +520,6 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
      */
     public void onPlaced(EntityLivingBase entityLiving, ItemStack itemStack)
     {
-        if (entityLiving instanceof EntityPlayer)
-        {
-            setOwner((EntityPlayer) entityLiving);
-        }
     }
 
     /**
@@ -718,7 +639,7 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
 
     public Cube getSelectBounds()
     {
-        return bounds;
+        return getTileData().bounds;
     }
 
     @SideOnly(Side.CLIENT)
@@ -729,7 +650,7 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
 
     public Cube getCollisionBounds()
     {
-        return bounds;
+        return getTileData().bounds;
     }
 
     public int getMetadata()
@@ -757,21 +678,15 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
         }
     }
 
-    @Override
-    public Set<EntityPlayer> getPlayersUsing()
-    {
-        return playersUsing;
-    }
-
     //TODO: Get rid of parameters
     public boolean shouldSideBeRendered(int side)
     {
-        return bounds == null || (side == 0 && this.bounds.min().y() > 0.0D)
-                || (side == 1 && this.bounds.max().y() < 1.0D)
-                || (side == 2 && this.bounds.min().z() > 0.0D)
-                || (side == 3 && this.bounds.max().z() < 1.0D)
-                || (side == 4 && this.bounds.min().x() > 0.0D)
-                || (side == 5 && this.bounds.max().x() < 1.0D)
+        return getTileData().bounds == null || (side == 0 && getTileData().bounds.min().y() > 0.0D)
+                || (side == 1 && getTileData().bounds.max().y() < 1.0D)
+                || (side == 2 && getTileData().bounds.min().z() > 0.0D)
+                || (side == 3 && getTileData().bounds.max().z() < 1.0D)
+                || (side == 4 && getTileData().bounds.min().x() > 0.0D)
+                || (side == 5 && getTileData().bounds.max().x() < 1.0D)
                 || !getAccess().getBlock(xi(), yi(), zi()).isOpaqueCube();
     }
 
@@ -821,7 +736,7 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
      */
     public boolean isSolid(int side)
     {
-        return material.isSolid();
+        return getTileData().material.isSolid();
     }
 
     /**
@@ -906,7 +821,7 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
      */
     public float getExplosionResistance(Entity entity)
     {
-        return resistance / 5f;
+        return getTileData().resistance / 5f;
     }
 
     public boolean isClient()
@@ -919,53 +834,6 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
         return !world().isRemote;
     }
 
-    //==========================
-    //== Owner Helper Methods ==
-    //==========================
-
-    public UUID getOwnerID()
-    {
-        return owner;
-    }
-
-    public String getOwnerName()
-    {
-        GameProfile profile = getOwnerProfile();
-        if (profile != null)
-        {
-            return profile.getName();
-        }
-        return null;
-    }
-
-    public GameProfile getOwnerProfile()
-    {
-        if (FMLCommonHandler.instance().getEffectiveSide().isClient())
-        {
-            return null;
-        }
-        return MinecraftServer.getServer().func_152358_ax().func_152652_a(owner);
-    }
-
-    public void setOwnerID(UUID id)
-    {
-        this.owner = id;
-    }
-
-    public void setOwner(EntityPlayer player)
-    {
-        if (player != null)
-        {
-            setOwnerID(player.getGameProfile().getId());
-            this.username = player.getCommandSenderName();
-        }
-        else
-        {
-            setOwnerID(null);
-            this.username = null;
-        }
-    }
-
     //=========================
     //==== Icons ==============
     //=========================
@@ -976,18 +844,6 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
     @SideOnly(Side.CLIENT)
     public IIcon getIcon(int side, int meta)
     {
-        if (useSidedTextures)
-        {
-            if (side == 0)
-            {
-                return getTopIcon(meta);
-            }
-            if (side == 1)
-            {
-                return getBottomIcon(meta);
-            }
-            return getSideIcon(meta, side);
-        }
         return getIcon(side);
     }
 
@@ -1009,9 +865,9 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
     @SideOnly(Side.CLIENT)
     public IIcon getIcon(String name)
     {
-        if (icons != null && icons.containsKey(name))
+        if (getTileData().icons != null && getTileData().icons.containsKey(name))
         {
-            return icons.get(name);
+            return getTileData().icons.get(name);
         }
         return null;
     }
@@ -1019,60 +875,14 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
     @SideOnly(Side.CLIENT)
     protected String getTextureName()
     {
-        if (textureName == null)
+        if (getTileData().textureName == null)
         {
-            return "MISSING_ICON_TILE_" + Block.getIdFromBlock(block) + "_" + name;
+            return "MISSING_ICON_TILE_" + Block.getIdFromBlock(getTileData().block) + "_" + getTileData().name;
         }
         else
         {
-            return block.staticTile.domain + textureName;
+            return getTileData().mod.getDomain() + getTileData().textureName;
         }
-    }
-
-    /**
-     * Gets the icon that renders on the top
-     *
-     * @param meta - placement data
-     * @return icon that will render on top
-     */
-    @SideOnly(Side.CLIENT)
-    protected IIcon getTopIcon(int meta)
-    {
-        IIcon icon = icons.get(getTextureName() + "_top");
-        if (icon == null)
-        {
-            icon = icons.get(getTextureName());
-        }
-        return icon;
-    }
-
-    /**
-     * Gets the icon that renders on the bottom
-     *
-     * @param meta - placement data
-     * @return icon that will render on bottom
-     */
-    @SideOnly(Side.CLIENT)
-    protected IIcon getBottomIcon(int meta)
-    {
-        IIcon icon = icons.get(getTextureName() + "_bottom");
-        if (icon == null)
-        {
-            icon = icons.get(getTextureName());
-        }
-        return icon;
-    }
-
-    /**
-     * Gets the icon that renders on the sides
-     *
-     * @param meta - placement data
-     * @return icon that will render on sides
-     */
-    @SideOnly(Side.CLIENT)
-    protected IIcon getSideIcon(int meta)
-    {
-        return getSideIcon(meta, 0);
     }
 
     /**
@@ -1085,12 +895,12 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
     @SideOnly(Side.CLIENT)
     protected IIcon getSideIcon(int meta, int side)
     {
-        if (icons != null)
+        if (getTileData().icons != null)
         {
-            IIcon icon = icons.get(getTextureName() + "_side");
+            IIcon icon = getTileData().icons.get(getTextureName() + "_side");
             if (icon == null)
             {
-                icon = icons.get(getTextureName());
+                icon = getTileData().icons.get(getTextureName());
             }
             return icon;
         }
@@ -1099,40 +909,13 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
 
     public void setTextureName(String value)
     {
-        textureName = value;
+        getTileData().textureName = value;
     }
 
     @SideOnly(Side.CLIENT)
     public void registerIcons(IIconRegister iconRegister)
     {
-        icons = new HashMap();
-        if (useSidedTextures)
-        {
-            registerSideTextureSet(iconRegister);
-        }
-        else
-        {
-            icons.put(getTextureName(), iconRegister.registerIcon(getTextureName()));
-        }
-        //TODO loop threw missing textures replacing them with textures based on material
-    }
-
-    /**
-     * Registers a set of 3 textures(top, sides, bottom) to be used for the block renderer
-     * Uses the texture name appended with _top _side _bottom
-     *
-     * @param iconRegister
-     */
-    @SideOnly(Side.CLIENT)
-    public void registerSideTextureSet(IIconRegister iconRegister)
-    {
-        if (icons == null)
-        {
-            icons = new HashMap();
-        }
-        icons.put(getTextureName(), iconRegister.registerIcon(getTextureName() + "_top"));
-        icons.put(getTextureName(), iconRegister.registerIcon(getTextureName() + "_side"));
-        icons.put(getTextureName(), iconRegister.registerIcon(getTextureName() + "_bottom"));
+        getTileData().icons.put(getTextureName(), iconRegister.registerIcon(getTextureName()));
     }
 
     @SideOnly(Side.CLIENT)
@@ -1202,7 +985,7 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
                 catch (Exception e)
                 {
                     dynamicRendererCrashed = true;
-                    renderNormalBlock = true;
+                    getTileData().renderNormalBlock = true;
                     System.out.println("A tile has failed to render dynamically as an item. Suppressing renderer to prevent future crashes.");
                     e.printStackTrace();
                 }
@@ -1389,5 +1172,10 @@ public abstract class TileA extends TileEntityBase implements IWorldPosition, IP
     public ForgeDirection determineForgeDirection(EntityLivingBase entityLiving)
     {
         return ForgeDirection.getOrientation(determineOrientation(entityLiving));
+    }
+
+    public TileData getTileData()
+    {
+        return tileData;
     }
 }

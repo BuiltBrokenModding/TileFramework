@@ -29,42 +29,54 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Created by robert on 1/4/2015.
+ * Wrapper class for senting Block method calls to {@link TileData} object and  {@link TileA} object.
+ *
+ * @author Dark
  */
 public class BlockTileA extends BlockContainer
 {
-    public TileA staticTile = null;
+    public final TileData tileData;
 
-    private boolean hasTile = false;
-
-    public BlockTileA(TileA tile, String prefix, CreativeTabs tab)
+    public BlockTileA(TileData data)
     {
-        super(tile.material);
-        this.staticTile = tile;
-        this.staticTile.setBlock(this);
-        this.opaque = isOpaqueCube();
-        this.setBlockBounds((float) this.staticTile.bounds.min().x(), (float) this.staticTile.bounds.min().y(), (float) this.staticTile.bounds.min().z(), (float) this.staticTile.bounds.max().x(), (float) this.staticTile.bounds.max().y(), (float) this.staticTile.bounds.max().z());
+        super(data.material);
+        this.tileData = data;
 
-        setBlockName(prefix + staticTile.name);
-        setBlockTextureName(prefix + staticTile.textureName);
-        setCreativeTab(staticTile.creativeTab == null ? tab : staticTile.creativeTab);
+        //Kill the game if the data is wrong
+        if (tileData == null)
+        {
+            throw new IllegalArgumentException("Tile data can not be null");
+        }
+        //Init missing data from tileData object
+        this.tileData.block = this;
+
+        //Load all data from tile data object
+        if (tileData != null)
+        {
+            this.setBlockBounds((float) this.tileData.bounds.min().x(), (float) this.tileData.bounds.min().y(), (float) this.tileData.bounds.min().z(), (float) this.tileData.bounds.max().x(), (float) this.tileData.bounds.max().y(), (float) this.tileData.bounds.max().z());
+        }
+
+        this.opaque = isOpaqueCube();
+        setBlockName(tileData.mod.getPrefix() + tileData.name);
+        setBlockTextureName(tileData.mod.getPrefix() + tileData.textureName);
+        setCreativeTab(tileData.creativeTab == null ? CreativeTabs.tabMisc : tileData.creativeTab);
         setLightOpacity(isOpaqueCube() ? 255 : 0);
-        setHardness(staticTile.hardness);
-        setResistance(staticTile.resistance);
-        setStepSound(staticTile.stepSound);
+        setHardness(tileData.hardness);
+        setResistance(tileData.resistance);
+        setStepSound(tileData.stepSound);
     }
 
     @Override
     public TileEntity createTileEntity(World world, int meta)
     {
-        return staticTile.newTile(world, meta);
+        return tileData.createNewTileEntity(world, meta);
     }
 
 
     @Override
     public TileEntity createNewTileEntity(World world, int meta)
     {
-        return staticTile.newTile(world, meta);
+        return tileData.createNewTileEntity(world, meta);
     }
 
     @Override
@@ -78,7 +90,7 @@ public class BlockTileA extends BlockContainer
     @Override
     public float getExplosionResistance(Entity entity)
     {
-        return staticTile.getExplosionResistance(entity);
+        return tileData.staticTile.getExplosionResistance(entity);
     }
 
     @Override
@@ -154,7 +166,7 @@ public class BlockTileA extends BlockContainer
     @Override
     public int quantityDropped(int meta, int fortune, Random random)
     {
-        return staticTile.quantityDropped(meta, fortune);
+        return tileData.staticTile.quantityDropped(meta, fortune);
     }
 
     @Override
@@ -267,7 +279,7 @@ public class BlockTileA extends BlockContainer
     public boolean shouldSideBeRendered(IBlockAccess access, int x, int y, int z, int side)
     {
         inject(access, x, y, z);
-        boolean value = staticTile.shouldSideBeRendered(side);
+        boolean value = tileData.staticTile.shouldSideBeRendered(side);
         eject();
         return value;
     }
@@ -304,20 +316,20 @@ public class BlockTileA extends BlockContainer
     @Override
     public boolean isOpaqueCube()
     {
-        return staticTile == null || staticTile.isOpaque;
+        return tileData.staticTile == null || tileData.isOpaque;
     }
 
     @Override
     public boolean renderAsNormalBlock()
     {
-        return staticTile.renderNormalBlock;
+        return tileData.renderNormalBlock;
     }
 
     @SideOnly(Side.CLIENT)
     @Override
     public int getRenderType()
     {
-        return staticTile.renderNormalBlock ? 0 : staticTile.renderType;
+        return tileData.renderNormalBlock ? 0 : tileData.renderType;
     }
 
     @SideOnly(Side.CLIENT)
@@ -334,14 +346,14 @@ public class BlockTileA extends BlockContainer
     @Override
     public IIcon getIcon(int side, int meta)
     {
-        return staticTile.getIcon(side, meta);
+        return tileData.staticTile.getIcon(side, meta);
     }
 
     @SideOnly(Side.CLIENT)
     @Override
     public void registerBlockIcons(IIconRegister iconRegister)
     {
-        staticTile.registerIcons(iconRegister);
+        tileData.staticTile.registerIcons(iconRegister);
     }
 
     @SideOnly(Side.CLIENT)
@@ -358,7 +370,7 @@ public class BlockTileA extends BlockContainer
     @Override
     public int getBlockColor()
     {
-        return staticTile.getBlockColor();
+        return tileData.staticTile.getBlockColor();
     }
 
     /**
@@ -368,7 +380,7 @@ public class BlockTileA extends BlockContainer
     @Override
     public int getRenderColor(int i)
     {
-        return staticTile.getRenderColor(i);
+        return tileData.staticTile.getRenderColor(i);
     }
 
     @Override
@@ -391,7 +403,7 @@ public class BlockTileA extends BlockContainer
     @Override
     public void getSubBlocks(Item item, CreativeTabs creativeTabs, List list)
     {
-        staticTile.getSubBlocks(item, creativeTabs, list);
+        tileData.staticTile.getSubBlocks(item, creativeTabs, list);
     }
 
     /**
@@ -400,7 +412,7 @@ public class BlockTileA extends BlockContainer
     @Override
     public boolean canProvidePower()
     {
-        return staticTile.canEmmitRedstone;
+        return tileData.canEmmitRedstone;
     }
 
     @Override
@@ -441,14 +453,14 @@ public class BlockTileA extends BlockContainer
     @Override
     public int getRenderBlockPass()
     {
-        return staticTile.getRenderBlockPass();
+        return tileData.staticTile.getRenderBlockPass();
     }
 
     @Override
     public int tickRate(World world)
     {
         inject(world, 0, 0, 0);
-        int t = staticTile.tickRate();
+        int t = tileData.staticTile.tickRate();
         eject();
         return t;
 
@@ -483,28 +495,21 @@ public class BlockTileA extends BlockContainer
     {
         if (access instanceof World)
         {
-            staticTile.setWorldObj(((World) access));
+            tileData.staticTile.setWorldObj(((World) access));
         }
 
-        staticTile.setAccess(access);
-        staticTile.xCoord = x;
-        staticTile.yCoord = y;
-        staticTile.zCoord = z;
-
-        TileEntity tile = access.getTileEntity(x, y, z);
-
-        if (tile instanceof TileA)
-        {
-            ((TileA) tile).setBlock(this);
-        }
+        tileData.staticTile.setAccess(access);
+        tileData.staticTile.xCoord = x;
+        tileData.staticTile.yCoord = y;
+        tileData.staticTile.zCoord = z;
     }
 
     public void eject()
     {
-        staticTile.setWorldObj(null);
-        staticTile.xCoord = 0;
-        staticTile.yCoord = 0;
-        staticTile.zCoord = 0;
+        tileData.staticTile.setWorldObj(null);
+        tileData.staticTile.xCoord = 0;
+        tileData.staticTile.yCoord = 0;
+        tileData.staticTile.zCoord = 0;
     }
 
     public TileA getTile(IBlockAccess world, int x, int y, int z)
@@ -514,6 +519,6 @@ public class BlockTileA extends BlockContainer
         {
             return ((TileA) tile);
         }
-        return staticTile;
+        return tileData.staticTile;
     }
 }
